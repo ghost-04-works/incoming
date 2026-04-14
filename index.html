@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="입고확인" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Geon. 입고확인</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    :root {
+      --bg:      #0a0a0a;
+      --bg2:     #111111;
+      --bg3:     #1a1a1a;
+      --border:  #2a2a2a;
+      --accent:  #c8f135;
+      --accent2: #a8d420;
+      --text:    #f0f0f0;
+      --text2:   #888;
+      --text3:   #555;
+      --red:     #ff4444;
+      --green:   #34d399;
+      --radius:  12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+    }
+
+    /* ── Header ── */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'Space Mono', monospace;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .logo svg { flex-shrink: 0; }
+    .logo span { color: var(--accent); }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text3);
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text3);
+      display: inline-block;
+      margin-right: 4px;
+    }
+    .status-dot.ok  { background: var(--green); }
+    .status-dot.err { background: var(--red); }
+
+    /* ── Main ── */
+    main {
+      padding: 20px 16px 80px;
+      max-width: 600px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ── Section cards ── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .card-title {
+      padding: 10px 16px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      color: var(--text3);
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      font-family: 'Space Mono', monospace;
+    }
+
+    /* ── Field rows ── */
+    .field-row {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .field-row:last-child { border-bottom: none; }
+    .field-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text2);
+      min-width: 64px;
+      flex-shrink: 0;
+    }
+    .field-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 14px;
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+    .field-input::placeholder { color: var(--text3); }
+    .field-input[type="date"] { color-scheme: dark; }
+
+    /* ── Check items ── */
+    .check-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .check-item:last-child { border-bottom: none; }
+
+    .check-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .check-num {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--text3);
+      min-width: 16px;
+    }
+    .check-info { flex: 1; }
+    .check-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .check-method {
+      font-size: 12px;
+      color: var(--text2);
+      margin-top: 2px;
+    }
+
+    .check-body {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding-left: 26px;
+    }
+    .check-result-input {
+      flex: 1;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 12px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: 'Noto Sans KR', sans-serif;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .check-result-input:focus { border-color: var(--accent); }
+    .check-result-input::placeholder { color: var(--text3); }
+
+    /* ── Status toggle ── */
+    .status-toggle {
+      display: flex;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .status-btn {
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      background: var(--bg3);
+      color: var(--text3);
+      transition: all 0.15s;
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+    .status-btn:first-child { border-right: 1px solid var(--border); }
+    .status-btn.ok.active  { background: var(--green); color: #0a0a0a; }
+    .status-btn.err.active { background: var(--red);   color: #fff; }
+
+    /* ── Textarea ── */
+    .notes-textarea {
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 14px;
+      font-family: 'Noto Sans KR', sans-serif;
+      resize: none;
+      padding: 14px 16px;
+      min-height: 90px;
+    }
+    .notes-textarea::placeholder { color: var(--text3); }
+
+    /* ── Submit ── */
+    .submit-wrap {
+      position: fixed;
+      bottom: 0;
+      left: 0; right: 0;
+      padding: 12px 16px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+    }
+    .btn-submit {
+      width: 100%;
+      padding: 14px;
+      border-radius: var(--radius);
+      border: none;
+      background: var(--accent);
+      color: #0a0a0a;
+      font-size: 15px;
+      font-weight: 700;
+      font-family: 'Noto Sans KR', sans-serif;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.3px;
+    }
+    .btn-submit:active { background: var(--accent2); transform: scale(0.99); }
+    .btn-submit:disabled { background: var(--bg3); color: var(--text3); cursor: not-allowed; transform: none; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 500;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.error   { border-color: var(--red);   color: var(--red); }
+    .toast.success { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Success screen ── */
+    .success-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 300;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 40px;
+      text-align: center;
+    }
+    .success-screen.show { display: flex; }
+    .success-icon { font-size: 56px; }
+    .success-title { font-size: 20px; font-weight: 700; }
+    .success-desc  { font-size: 14px; color: var(--text2); line-height: 1.6; }
+
+    /* ── Login screen ── */
+    #lock-screen {
+      display: flex;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 999;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 40px;
+    }
+    #lock-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 22px;
+      font-weight: 700;
+    }
+    #lock-desc { font-size: 13px; color: var(--text2); text-align: center; line-height: 1.6; }
+    #lock-error { font-size: 13px; color: var(--red); min-height: 18px; text-align: center; }
+    .btn-login {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 13px 28px;
+      border-radius: var(--radius);
+      border: none;
+      background: var(--accent);
+      color: #0a0a0a;
+      font-size: 15px;
+      font-weight: 700;
+      font-family: 'Noto Sans KR', sans-serif;
+      cursor: pointer;
+      transition: all 0.15s;
+      flex: none;
+    }
+    .btn-login:active { background: var(--accent2); }
+    .btn-login:disabled { background: var(--bg3); color: var(--text3); cursor: not-allowed; }
+
+    /* ── Settings tab ── */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .tab {
+      flex: 1;
+      padding: 12px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text3);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    #settings-view {
+      padding: 20px 16px;
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+    #settings-view.active { display: flex; }
+
+    .settings-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .settings-label { font-size: 13px; font-weight: 500; }
+    .settings-desc  { font-size: 12px; color: var(--text2); }
+    .settings-input {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: 'Space Mono', monospace;
+      outline: none;
+      transition: border-color 0.2s;
+      width: 100%;
+    }
+    .settings-input:focus { border-color: var(--accent); }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: 'Noto Sans KR', sans-serif;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--bg3);
+      color: var(--text);
+      transition: all 0.15s;
+      width: 100%;
+    }
+    .btn-secondary:active { background: var(--border); }
+    .btn-logout { border-color: var(--red); color: var(--red); }
+
+    #settings-status { font-size: 13px; color: var(--text2); text-align: center; min-height: 18px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="20" height="20" viewBox="0 0 596 842" xmlns="http://www.w3.org/2000/svg" style="fill:var(--text);" fill-rule="evenodd" clip-rule="evenodd">
+      <g transform="translate(-9.3635,-817.6605)">
+        <path d="M485.655,1233.52L412.764,1306.41L485.655,1306.41L485.655,1233.52Z"/>
+        <path d="M485.655,1091.31L270.556,1306.41L350.053,1385.9L350,1306.41L485.655,1170.75L485.655,1091.31Z"/>
+        <path d="M485.655,1379.3L412.764,1306.41L412.764,1385.96L350.053,1448.67L207.791,1306.41L485.655,1028.54L485.655,949.101L128.348,1306.41L350.053,1528.11L485.655,1379.3Z"/>
+      </g>
+    </svg>
+    입고<span>.</span>확인
+  </div>
+  <div class="header-right">
+    <span class="status-dot" id="conn-dot"></span>
+    <span id="conn-text">미연결</span>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="form">📋 입고확인</div>
+  <div class="tab" data-tab="settings">⚙️ 설정</div>
+</div>
+
+<!-- Form View -->
+<div id="form-view" class="view active">
+  <main>
+
+    <!-- 기본 정보 -->
+    <div class="card">
+      <div class="card-title">기본 정보</div>
+      <div class="field-row">
+        <label class="field-label" for="inp-date">입고일</label>
+        <input class="field-input" id="inp-date" type="date" />
+      </div>
+      <div class="field-row">
+        <label class="field-label" for="inp-check-date">검수일</label>
+        <input class="field-input" id="inp-check-date" type="date" />
+      </div>
+      <div class="field-row">
+        <label class="field-label" for="inp-inspector">검수자</label>
+        <input class="field-input" id="inp-inspector" type="text" placeholder="이름 입력" />
+      </div>
+      <div class="field-row">
+        <label class="field-label" for="inp-confirmer">확인</label>
+        <input class="field-input" id="inp-confirmer" type="text" placeholder="이름 입력" />
+      </div>
+    </div>
+
+    <!-- 체크 항목 -->
+    <div class="card">
+      <div class="card-title">확인 항목</div>
+
+      <!-- 1. 제품명 -->
+      <div class="check-item">
+        <div class="check-header">
+          <span class="check-num">1</span>
+          <div class="check-info">
+            <div class="check-name">제품명</div>
+            <div class="check-method">입고품 및 인보이스 확인</div>
+          </div>
+        </div>
+        <div class="check-body">
+          <input class="check-result-input" id="res-product" type="text" placeholder="제품명 입력" />
+          <div class="status-toggle">
+            <button class="status-btn ok"  data-item="product" data-val="이상없음">✓</button>
+            <button class="status-btn err" data-item="product" data-val="이상있음">✗</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 제품 수량 -->
+      <div class="check-item">
+        <div class="check-header">
+          <span class="check-num">2</span>
+          <div class="check-info">
+            <div class="check-name">제품 수량</div>
+            <div class="check-method">실수량 확인</div>
+          </div>
+        </div>
+        <div class="check-body">
+          <input class="check-result-input" id="res-qty" type="number" placeholder="수량 입력" min="0" />
+          <div class="status-toggle">
+            <button class="status-btn ok"  data-item="qty" data-val="이상없음">✓</button>
+            <button class="status-btn err" data-item="qty" data-val="이상있음">✗</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. 발주 수량 -->
+      <div class="check-item">
+        <div class="check-header">
+          <span class="check-num">3</span>
+          <div class="check-info">
+            <div class="check-name">발주 수량</div>
+            <div class="check-method">거래명세서, 인보이스 확인</div>
+          </div>
+        </div>
+        <div class="check-body">
+          <input class="check-result-input" id="res-order-qty" type="number" placeholder="수량 입력" min="0" />
+          <div class="status-toggle">
+            <button class="status-btn ok"  data-item="orderQty" data-val="이상없음">✓</button>
+            <button class="status-btn err" data-item="orderQty" data-val="이상있음">✗</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. 박스 수량 -->
+      <div class="check-item">
+        <div class="check-header">
+          <span class="check-num">4</span>
+          <div class="check-info">
+            <div class="check-name">박스 수량</div>
+            <div class="check-method">실수량 확인</div>
+          </div>
+        </div>
+        <div class="check-body">
+          <input class="check-result-input" id="res-box" type="number" placeholder="수량 입력" min="0" />
+          <div class="status-toggle">
+            <button class="status-btn ok"  data-item="box" data-val="이상없음">✓</button>
+            <button class="status-btn err" data-item="box" data-val="이상있음">✗</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 특이사항 -->
+    <div class="card">
+      <div class="card-title">특이사항</div>
+      <textarea class="notes-textarea" id="inp-notes" placeholder="특이사항이 있으면 입력해 주세요"></textarea>
+    </div>
+
+  </main>
+
+  <div class="submit-wrap">
+    <button class="btn-submit" id="btn-submit">제출</button>
+  </div>
+</div>
+
+<!-- Settings View -->
+<div id="settings-view" class="view">
+  <div class="card">
+    <div class="card-title">Google Sheets 연동</div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+      <div class="settings-row">
+        <div class="settings-label">Spreadsheet ID</div>
+        <div class="settings-desc">입고확인 데이터를 저장할 스프레드시트 ID</div>
+        <input class="settings-input" id="cfg-sheet-id" type="text" placeholder="스프레드시트 ID 입력" />
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">시트 이름</div>
+        <div class="settings-desc">데이터를 저장할 탭 이름</div>
+        <input class="settings-input" id="cfg-sheet-name" type="text" placeholder="입고확인" />
+      </div>
+      <button class="btn-secondary" id="btn-save-settings">저장 및 연결 테스트</button>
+      <div id="settings-status"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">계정</div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+      <div class="settings-desc" id="login-status-desc">확인 중...</div>
+      <button class="btn-secondary btn-logout" id="btn-logout">로그아웃</button>
+    </div>
+  </div>
+</div>
+
+<!-- Success Screen -->
+<div class="success-screen" id="success-screen">
+  <div class="success-icon">✅</div>
+  <div class="success-title">제출 완료!</div>
+  <div class="success-desc" id="success-desc">스프레드시트에 저장됐어요.</div>
+  <button class="btn-login" id="btn-new-entry" style="margin-top:8px;">새 입고 입력하기</button>
+</div>
+
+<!-- Login Screen -->
+<div id="lock-screen">
+  <svg width="52" height="52" viewBox="0 0 596 842" xmlns="http://www.w3.org/2000/svg" style="fill:var(--text);margin-bottom:4px;" fill-rule="evenodd" clip-rule="evenodd">
+    <g transform="translate(-9.3635,-817.6605)">
+      <path d="M485.655,1233.52L412.764,1306.41L485.655,1306.41L485.655,1233.52Z"/>
+      <path d="M485.655,1091.31L270.556,1306.41L350.053,1385.9L350,1306.41L485.655,1170.75L485.655,1091.31Z"/>
+      <path d="M485.655,1379.3L412.764,1306.41L412.764,1385.96L350.053,1448.67L207.791,1306.41L485.655,1028.54L485.655,949.101L128.348,1306.41L350.053,1528.11L485.655,1379.3Z"/>
+    </g>
+  </svg>
+  <div id="lock-title">Geon<span style="color:var(--accent)">.</span>입고확인</div>
+  <div id="lock-desc">GEONWORKS 계정으로 로그인하세요</div>
+  <button class="btn-login" id="lock-submit" onclick="startGoogleLogin()">
+    <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#fff" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/></svg>
+    Google 로그인
+  </button>
+  <div id="lock-error"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const s = document.createElement('script');
+  s.src = 'app.js?v=' + Date.now();
+  document.body.appendChild(s);
+</script>
+</body>
+</html>
