@@ -275,13 +275,15 @@ async function submitForm() {
   const submitTime = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
   // 품목별로 한 행씩
-  const rows = items.map((item, idx) => {
+  const rows = items.map((item, idx) => {    // 빈 항목 여부 (공급처, 제품명, 수량 모두 비어있으면 스킵)
+    const isEmpty = !item.supplier && !item.product && !item.qty && !item.orderQty && !item.box && !item.notes;
+
     const statuses = [item.productStatus, item.orderQtyStatus];
     const hasError  = statuses.includes('이상있음');
     const allFilled = statuses.every(v => v !== null);
-    const itemStatus = !allFilled ? '미완료' : hasError ? '이상있음' : '이상없음';
+    const isComplete = allFilled && !hasError ? 'Y' : allFilled ? 'N' : '미완료';
 
-    return [
+    return isEmpty ? null : [
       idx + 1,
       item.supplier,
       item.product,
@@ -290,7 +292,6 @@ async function submitForm() {
       item.orderQty,
       item.orderQtyStatus  || '미입력',
       item.box,
-      itemStatus,
       item.notes,
       $('inp-date').value,
       $('inp-check-date').value,
@@ -298,8 +299,17 @@ async function submitForm() {
       $('inp-confirmer').value,
       window._authorName || '',
       submitTime,
+      isComplete,
     ];
   });
+
+  const validRows = rows.filter(r => r !== null);
+  if (!validRows.length) {
+    showToast('작성된 품목이 없어요', 'error');
+    $('btn-submit').disabled = false;
+    $('btn-submit').textContent = '제출';
+    return;
+  }
 
   try {
     await ensureHeader(sheetId, sheetName);
@@ -309,14 +319,14 @@ async function submitForm() {
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: rows }),
+        body: JSON.stringify({ values: validRows }),
       }
     );
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error?.message || `HTTP ${res.status}`);
     }
-    $('success-desc').textContent = `${submitTime} 저장됨 — ${items.length}개 품목`;
+    $('success-desc').textContent = `${submitTime} 저장됨 — ${validRows.length}개 품목`;
     $('success-screen').classList.add('show');
   } catch (e) {
     showToast('제출 실패: ' + e.message, 'error');
@@ -338,8 +348,8 @@ async function ensureHeader(sheetId, sheetName) {
   const header = [
     '품목번호', '공급처', '제품명', '제품명_상태',
     '제품수량', '발주수량', '발주수량_상태',
-    '박스수량', '품목상태', '특이사항',
-    '입고일', '검수일', '검수자', '확인자', '작성자', '작성일시',
+    '박스수량', '특이사항',
+    '입고일', '검수일', '검수자', '확인자', '작성자', '작성일시', '작성완료',
   ];
   await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=USER_ENTERED`,
