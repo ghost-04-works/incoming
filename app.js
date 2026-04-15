@@ -106,7 +106,8 @@ async function onLoginSuccess() {
   updateLoginStatusUI();
   await fetchUserInfo();
   await updateDropdowns();
-  addItem(); // 첫 품목 자동 추가
+  suppliers = await fetchSuppliers();
+  addItem();
 }
 
 async function fetchUserInfo() {
@@ -284,24 +285,23 @@ async function submitForm() {
 
   // 품목별로 한 행씩
   const rows = items.map((item, idx) => {
-    const statuses = [item.productStatus, item.qtyStatus, item.orderQtyStatus, item.boxStatus];
+    const statuses = [item.productStatus, item.orderQtyStatus];
     const hasError  = statuses.includes('이상있음');
     const allFilled = statuses.every(v => v !== null);
     const itemStatus = !allFilled ? '미완료' : hasError ? '이상있음' : '이상없음';
 
     return [
       ...commonFields,
-      idx + 1,           // 품목 번호
+      idx + 1,
+      item.supplier,
       item.product,
-      item.productStatus  || '미입력',
+      item.productStatus   || '미입력',
       item.qty,
-      item.qtyStatus      || '미입력',
       item.orderQty,
-      item.orderQtyStatus || '미입력',
+      item.orderQtyStatus  || '미입력',
       item.box,
-      item.boxStatus      || '미입력',
-      idx === 0 ? $('inp-notes').value : '', // 특이사항은 첫 행에만
       itemStatus,
+      idx === 0 ? $('inp-notes').value : '',
     ];
   });
 
@@ -340,12 +340,10 @@ async function ensureHeader(sheetId, sheetName) {
 
   // 헤더 추가
   const header = [
-    '제출일시', '입고일', '검수일', '검수자', '확인자', '작성자', '품목번호',
-    '제품명', '제품명_상태',
-    '제품수량', '제품수량_상태',
-    '발주수량', '발주수량_상태',
-    '박스수량', '박스수량_상태',
-    '특이사항', '품목상태',
+    '작성일시', '입고일', '검수일', '검수자', '확인자', '작성자', '품목번호',
+    '공급처', '제품명', '제품명_상태',
+    '제품수량', '발주수량', '발주수량_상태',
+    '박스수량', '품목상태', '특이사항',
   ];
   await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=USER_ENTERED`,
@@ -361,9 +359,11 @@ async function ensureHeader(sheetId, sheetName) {
 }
 
 // ── Item management
+let suppliers = []; // 공급처 목록 캐시
+
 function addItem() {
   const id = ++itemIdCounter;
-  items.push({ id, product: '', qty: '', orderQty: '', box: '', productStatus: null, qtyStatus: null, orderQtyStatus: null, boxStatus: null });
+  items.push({ id, supplier: '', product: '', qty: '', orderQty: '', box: '', productStatus: null, orderQtyStatus: null });
   renderItems();
 }
 
@@ -380,6 +380,10 @@ function setItemStatus(id, field, val) {
 
 function renderItems() {
   const container = $('items-container');
+  const supplierOptions = ['<option value="">선택</option>',
+    ...suppliers.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`)
+  ].join('');
+
   container.innerHTML = items.map((item, idx) => `
     <div class="item-card" id="item-${item.id}">
       <div class="item-card-header">
@@ -387,6 +391,28 @@ function renderItems() {
         <button class="btn-remove-item" onclick="removeItem(${item.id})">✕</button>
       </div>
       <div class="item-fields">
+
+        <!-- 공급처 -->
+        <div class="item-field">
+          <div class="item-field-label">공급처</div>
+          <div class="item-field-row">
+            <select class="check-result-input" id="supplier-sel-${item.id}"
+              onchange="items.find(i=>i.id===${item.id}).supplier=this.value;toggleSupplierInput(${item.id})">
+              ${supplierOptions}
+            </select>
+            <button class="status-btn ok" style="flex-shrink:0;padding:8px 10px;font-size:14px;"
+              onclick="showSupplierAdd(${item.id})" title="공급처 추가">＋</button>
+          </div>
+          <div id="supplier-add-${item.id}" style="display:none;margin-top:6px;">
+            <div class="item-field-row">
+              <input class="check-result-input" id="supplier-inp-${item.id}" type="text" placeholder="새 공급처 이름" />
+              <button class="status-btn ok" style="flex-shrink:0;padding:8px 10px;"
+                onclick="addSupplierInline(${item.id})">저장</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 제품명 -->
         <div class="item-field">
           <div class="item-field-label">제품명 · 입고품 및 인보이스 확인</div>
           <div class="item-field-row">
@@ -401,20 +427,16 @@ function renderItems() {
             </div>
           </div>
         </div>
+
+        <!-- 제품 수량 (토글 없음) -->
         <div class="item-field">
           <div class="item-field-label">제품 수량 · 실수량 확인</div>
-          <div class="item-field-row">
-            <input class="check-result-input" type="number" placeholder="수량 입력" min="0"
-              value="${item.qty}"
-              oninput="items.find(i=>i.id===${item.id}).qty=this.value" />
-            <div class="status-toggle">
-              <button class="status-btn ok ${item.qtyStatus === '이상없음' ? 'active' : ''}"
-                onclick="setItemStatus(${item.id},'qtyStatus','이상없음');toggleStatus(this)">✓</button>
-              <button class="status-btn err ${item.qtyStatus === '이상있음' ? 'active' : ''}"
-                onclick="setItemStatus(${item.id},'qtyStatus','이상있음');toggleStatus(this)">✗</button>
-            </div>
-          </div>
+          <input class="check-result-input" type="number" placeholder="수량 입력" min="0"
+            value="${item.qty}"
+            oninput="items.find(i=>i.id===${item.id}).qty=this.value" />
         </div>
+
+        <!-- 발주 수량 -->
         <div class="item-field">
           <div class="item-field-label">발주 수량 · 거래명세서, 인보이스 확인</div>
           <div class="item-field-row">
@@ -429,23 +451,24 @@ function renderItems() {
             </div>
           </div>
         </div>
+
+        <!-- 박스 수량 (토글 없음) -->
         <div class="item-field">
           <div class="item-field-label">박스 수량 · 실수량 확인</div>
-          <div class="item-field-row">
-            <input class="check-result-input" type="number" placeholder="수량 입력" min="0"
-              value="${item.box}"
-              oninput="items.find(i=>i.id===${item.id}).box=this.value" />
-            <div class="status-toggle">
-              <button class="status-btn ok ${item.boxStatus === '이상없음' ? 'active' : ''}"
-                onclick="setItemStatus(${item.id},'boxStatus','이상없음');toggleStatus(this)">✓</button>
-              <button class="status-btn err ${item.boxStatus === '이상있음' ? 'active' : ''}"
-                onclick="setItemStatus(${item.id},'boxStatus','이상있음');toggleStatus(this)">✗</button>
-            </div>
-          </div>
+          <input class="check-result-input" type="number" placeholder="수량 입력" min="0"
+            value="${item.box}"
+            oninput="items.find(i=>i.id===${item.id}).box=this.value" />
         </div>
+
       </div>
     </div>
   `).join('');
+
+  // 저장된 공급처 값 복원
+  items.forEach(item => {
+    const sel = $(`supplier-sel-${item.id}`);
+    if (sel && item.supplier) sel.value = item.supplier;
+  });
 }
 
 function toggleStatus(btn) {
@@ -454,8 +477,73 @@ function toggleStatus(btn) {
   btn.classList.add('active');
 }
 
-// ── Member management (Google Sheets 기반)
-const MEMBER_SHEET = '멤버';
+function showSupplierAdd(id) {
+  const el = $(`supplier-add-${id}`);
+  if (el) { el.style.display = el.style.display === 'none' ? '' : 'none'; }
+  const inp = $(`supplier-inp-${id}`);
+  if (inp) inp.focus();
+}
+
+function toggleSupplierInput(id) {
+  // 드롭다운 선택 시 추가 입력 닫기
+  const el = $(`supplier-add-${id}`);
+  if (el) el.style.display = 'none';
+}
+
+async function addSupplierInline(id) {
+  const inp = $(`supplier-inp-${id}`);
+  const name = inp?.value.trim();
+  if (!name) return;
+  if (suppliers.includes(name)) {
+    showToast('이미 있는 공급처예요', 'error');
+    return;
+  }
+  const sheetId = cfg.get('sheet_id');
+  if (!sheetId) { showToast('설정에서 스프레드시트 ID를 먼저 입력하세요', 'error'); return; }
+  const ok = await ensureToken();
+  if (!ok) return;
+  try {
+    await ensureSheetTab(sheetId, SUPPLIER_SHEET);
+    const range = encodeURIComponent(`${SUPPLIER_SHEET}!A:A`);
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [[name]] }),
+      }
+    );
+    suppliers.push(name);
+    // 현재 아이템에 바로 선택
+    items.find(i => i.id === id).supplier = name;
+    inp.value = '';
+    renderItems();
+    showToast(`'${name}' 추가됐어요`, 'success');
+  } catch (e) {
+    showToast('추가 실패: ' + e.message, 'error');
+  }
+}
+
+// ── Member & Supplier management (Google Sheets 기반)
+const MEMBER_SHEET   = '멤버';
+const SUPPLIER_SHEET = '공급처';
+
+async function fetchSuppliers() {
+  const sheetId = cfg.get('sheet_id');
+  if (!sheetId) return [];
+  const ok = await ensureToken();
+  if (!ok) return [];
+  try {
+    const range = encodeURIComponent(`${SUPPLIER_SHEET}!A:A`);
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json.values || []).flat().filter(v => v && v.trim());
+  } catch { return []; }
+}
 
 async function fetchMembers() {
   const sheetId = cfg.get('sheet_id');
@@ -496,20 +584,20 @@ async function fetchUserName() {
 async function addMember() {} // 더 이상 사용 안 함
 async function removeMember() {} // 더 이상 사용 안 함
 
-async function ensureMemberSheet(sheetId) {
+async function ensureSheetTab(sheetId, tabName) {
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const json = await res.json();
-  const exists = json.sheets?.some(s => s.properties.title === MEMBER_SHEET);
+  const exists = json.sheets?.some(s => s.properties.title === tabName);
   if (exists) return;
   await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: MEMBER_SHEET } } }] }),
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tabName } } }] }),
     }
   );
 }
