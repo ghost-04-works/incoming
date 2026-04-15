@@ -104,12 +104,11 @@ function onTokenError(err) {
   $('lock-submit').disabled = false;
 }
 
-function onLoginSuccess() {
+async function onLoginSuccess() {
   $('lock-screen').style.display = 'none';
   updateConnStatus(!!cfg.get('sheet_id'));
   updateLoginStatusUI();
-  renderMemberList();
-  updateDropdowns();
+  await updateDropdowns();
 }
 
 function logout() {
@@ -149,7 +148,10 @@ function bindEvents() {
       const name = tab.dataset.tab;
       $('form-view').classList.toggle('active', name === 'form');
       $('settings-view').classList.toggle('active', name === 'settings');
-      if (name === 'settings') updateLoginStatusUI();
+      if (name === 'settings') {
+        updateLoginStatusUI();
+        renderMemberList();
+      }
     });
   });
 
@@ -348,41 +350,135 @@ async function ensureHeader(sheetId, sheetName) {
   );
 }
 
-// ── Member management
-function getMembers() {
-  try { return JSON.parse(localStorage.getItem('gw_incoming_members') || '[]'); }
-  catch { return []; }
+// ── Member management (Google Sheets 기반)
+const MEMBER_SHEET = '멤버';
+
+async function fetchMembers() {
+  const sheetId = cfg.get('sheet_id');
+  if (!sheetId) return [];
+  const ok = await ensureToken();
+  if (!ok) return [];
+  try {
+    const range = encodeURIComponent(`${MEMBER_SHEET}!A:A`);
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json.values || []).flat().filter(v => v && v.trim());
+  } catch { return []; }
 }
 
-function saveMembers(members) {
-  localStorage.setItem('gw_incoming_members', JSON.stringify(members));
-}
-
-function addMember() {
+async function addMember() {
   const name = $('inp-new-member').value.trim();
   if (!name) return;
-  const members = getMembers();
-  if (members.includes(name)) {
-    showToast('이미 있는 이름이에요', 'error');
-    return;
+  const sheetId = cfg.get('sheet_id');
+  if (!sheetId) { showToast('설정에서 스프레드시트 ID를 먼저 입력하세요', 'error'); return; }
+
+  const members = await fetchMembers();
+  if (members.includes(name)) { showToast('이미 있는 이름이에요', 'error'); return; }
+
+  const ok = await ensureToken();
+  if (!ok) return;
+
+  try {
+    await ensureMemberSheet(sheetId);
+    const range = encodeURIComponent(`${MEMBER_SHEET}!A:A`);
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [[name]] }),
+      }
+    );
+    if (!res.ok) throw new Error('추가 실패');
+    $('inp-new-member').value = '';
+    showToast(`${name} 추가됐어요`, 'success');
+    await renderMemberList();
+    await updateDropdowns();
+  } catch (e) {
+    showToast('추가 실패: ' + e.message, 'error');
   }
-  members.push(name);
-  saveMembers(members);
-  $('inp-new-member').value = '';
-  renderMemberList();
-  updateDropdowns();
 }
 
-function removeMember(name) {
-  const members = getMembers().filter(m => m !== name);
-  saveMembers(members);
-  renderMemberList();
-  updateDropdowns();
+async function removeMember(name) {
+  if (!confirm(`'${name}'을(를) 삭제할까요?`)) return;
+  const sheetId = cfg.get('sheet_id');
+  if (!sheetId) return;
+  const ok = await ensureToken();
+  if (!ok) return;
+
+  try {
+    // 전체 데이터 읽기
+    const range = encodeURIComponent(`${MEMBER_SHEET}!A:A`);
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const json = await res.json();
+    const values = (json.values || []).flat();
+
+    // 해당 이름의 행 인덱스 찾기 (1-based)
+    const rowIdx = values.findIndex(v => v === name);
+    if (rowIdx === -1) return;
+
+    // 스프레드시트 ID 가져와서 시트 ID 확인
+    const ssRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const ssJson = await ssRes.json();
+    const sheet = ssJson.sheets.find(s => s.properties.title === MEMBER_SHEET);
+    if (!sheet) return;
+    const sheetGid = sheet.properties.sheetId;
+
+    // 해당 행 삭제
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{
+            deleteDimension: {
+              range: { sheetId: sheetGid, dimension: 'ROWS', startIndex: rowIdx, endIndex: rowIdx + 1 }
+            }
+          }]
+        }),
+      }
+    );
+    showToast(`${name} 삭제됐어요`, 'success');
+    await renderMemberList();
+    await updateDropdowns();
+  } catch (e) {
+    showToast('삭제 실패: ' + e.message, 'error');
+  }
 }
 
-function renderMemberList() {
-  const members = getMembers();
+async function ensureMemberSheet(sheetId) {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const json = await res.json();
+  const exists = json.sheets?.some(s => s.properties.title === MEMBER_SHEET);
+  if (exists) return;
+  await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: MEMBER_SHEET } } }] }),
+    }
+  );
+}
+
+async function renderMemberList() {
   const el = $('member-list');
+  el.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:4px 0;">불러오는 중...</div>`;
+  const members = await fetchMembers();
   if (!members.length) {
     el.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:4px 0;">멤버가 없어요</div>`;
     return;
@@ -395,8 +491,8 @@ function renderMemberList() {
   `).join('');
 }
 
-function updateDropdowns() {
-  const members = getMembers();
+async function updateDropdowns() {
+  const members = await fetchMembers();
   ['inp-inspector', 'inp-confirmer'].forEach(id => {
     const sel = $(id);
     const cur = sel.value;
