@@ -226,6 +226,12 @@ async function submitForm() {
   if (!sheetId) { showToast('설정에서 스프레드시트 ID를 먼저 입력하세요', 'error'); return; }
   if (!items.length) { showToast('품목을 추가해 주세요', 'error'); return; }
 
+  // 필수 항목 검증
+  if (!$('inp-date').value)       { showToast('입고일을 입력해 주세요', 'error'); $('inp-date').focus(); return; }
+  if (!$('inp-check-date').value) { showToast('검수일을 입력해 주세요', 'error'); $('inp-check-date').focus(); return; }
+  if (!$('inp-inspector').value)  { showToast('검수자를 선택해 주세요', 'error'); return; }
+  if (!$('inp-confirmer').value)  { showToast('확인자를 선택해 주세요', 'error'); return; }
+
   const ok = await ensureToken();
   if (!ok) { showToast('로그인이 필요해요', 'error'); return; }
 
