@@ -281,7 +281,7 @@ async function submitForm() {
     const statuses = [item.productStatus, item.orderQtyStatus];
     const hasError  = statuses.includes('이상있음');
     const allFilled = statuses.every(v => v !== null);
-    const isComplete = allFilled && !hasError ? 'Y' : allFilled ? 'N' : '미완료';
+    const isComplete = allFilled && !hasError ? '이상없음' : allFilled ? '이상있음' : '미완료';
 
     return isEmpty ? null : [
       idx + 1,
@@ -349,7 +349,7 @@ async function ensureHeader(sheetId, sheetName) {
     '품목번호', '공급처', '제품명', '제품명_상태',
     '제품수량', '발주수량', '발주수량_상태',
     '박스수량', '특이사항',
-    '입고일', '검수일', '검수자', '확인자', '작성자', '작성일시', '작성완료',
+    '입고일', '검수일', '검수자', '확인자', '작성자', '작성일시', '검수결과',
   ];
   await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=USER_ENTERED`,
