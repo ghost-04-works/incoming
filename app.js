@@ -253,9 +253,9 @@ async function generateReceiptNo() {
 
     const json = await res.json();
     const values = (json.values || []).flat();
-    // 오늘 날짜 prefix로 시작하는 접수번호 개수 카운트
-    const todayCount = values.filter(v => String(v).startsWith(prefix)).length;
-    const seq = String(todayCount + 1).padStart(3, '0');
+    // 오늘 날짜 prefix로 시작하는 고유 접수번호 개수 카운트
+    const todayNos = new Set(values.filter(v => String(v).startsWith(prefix)));
+    const seq = String(todayNos.size + 1).padStart(3, '0');
     return `${prefix}-${seq}`;
   } catch {
     return `${prefix}-001`;
