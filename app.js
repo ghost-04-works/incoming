@@ -233,7 +233,7 @@ function updateLoginStatusUI() {
 }
 
 // ── Receipt number (YYMMDD-NNN)
-async function generateReceiptNo(submitTime) {
+async function generateReceiptNo() {
   const now = new Date();
   const yy  = String(now.getFullYear()).slice(2);
   const mm  = String(now.getMonth() + 1).padStart(2, '0');
@@ -282,11 +282,11 @@ async function submitForm() {
   $('btn-submit').disabled = true;
   $('btn-submit').textContent = '제출 중...';
 
-  // 접수번호 생성 (YYMMDD-NNN)
-  const receiptNo = await generateReceiptNo(submitTime);
-
   const now = new Date();
   const submitTime = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+  // 접수번호 생성 (YYMMDD-NNN)
+  const receiptNo = await generateReceiptNo();
 
   // 품목별로 한 행씩
   const rows = items.map((item, idx) => {    // 빈 항목 여부 (공급처, 제품명, 수량 모두 비어있으면 스킵)
