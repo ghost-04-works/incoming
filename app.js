@@ -25,6 +25,8 @@ const $ = id => document.getElementById(id);
 function init() {
   bindEvents();
   setDefaultDates();
+  bindDateInput('inp-date');
+  bindDateInput('inp-check-date');
 
   // 기존 서비스워커 해제
   if ('serviceWorker' in navigator) {
@@ -196,8 +198,20 @@ function bindEvents() {
 
 // ── Dates
 function setDefaultDates() {
-  const today = new Date().toISOString().split('T')[0];
-  $('inp-check-date').value = today;
+  const today = new Date();
+  const formatted = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  $('inp-check-date').value = formatted;
+}
+
+function bindDateInput(id) {
+  const el = $(id);
+  el.addEventListener('input', e => {
+    let v = e.target.value.replace(/\D/g, '');
+    if (v.length > 4) v = v.slice(0,4) + '-' + v.slice(4);
+    if (v.length > 7) v = v.slice(0,7) + '-' + v.slice(7);
+    if (v.length > 10) v = v.slice(0,10);
+    e.target.value = v;
+  });
 }
 
 // ── Settings
