@@ -191,24 +191,30 @@ async function saveSettings() {
   cfg.set('sheet_id',   $('cfg-sheet-id').value.trim());
   cfg.set('sheet_name', $('cfg-sheet-name').value.trim() || '입고확인');
   $('settings-status').textContent = '연결 테스트 중...';
-  const ok = await testConnection();
-  $('settings-status').textContent = ok ? '✅ 연결 성공' : '❌ 연결 실패 — 시트 ID를 확인하세요';
-  updateConnStatus(ok);
+  const result = await testConnection();
+  $('settings-status').textContent = result.ok
+    ? '✅ 연결 성공'
+    : `❌ 연결 실패 — ${result.msg}`;
+  updateConnStatus(result.ok);
 }
 
 async function testConnection() {
   const sheetId   = cfg.get('sheet_id');
   const sheetName = cfg.get('sheet_name') || '입고확인';
-  if (!sheetId) return false;
-  const ok = await ensureToken();
-  if (!ok) return false;
+  if (!sheetId) return { ok: false, msg: '스프레드시트 ID가 없어요' };
+  const tokenOk = await ensureToken();
+  if (!tokenOk) return { ok: false, msg: '로그인 토큰 갱신 실패' };
   try {
     const range = encodeURIComponent(`${sheetName}!A1`);
     const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
-    return res.ok;
-  } catch { return false; }
+    if (res.ok) return { ok: true };
+    const err = await res.json();
+    return { ok: false, msg: `HTTP ${res.status}: ${err.error?.message || '알 수 없는 오류'}` };
+  } catch (e) {
+    return { ok: false, msg: e.message };
+  }
 }
 
 function updateConnStatus(ok) {
