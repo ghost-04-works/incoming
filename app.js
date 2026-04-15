@@ -10,13 +10,9 @@ let accessToken = null;
 let tokenClient = null;
 let tokenExpiry = 0;
 
-// 각 항목의 이상없음/이상있음 상태
-const status = {
-  product:  null,
-  qty:      null,
-  orderQty: null,
-  box:      null,
-};
+// 품목 데이터 배열
+let items = [];
+let itemIdCounter = 0;
 
 // ── Config
 const cfg = {
@@ -110,6 +106,7 @@ async function onLoginSuccess() {
   updateLoginStatusUI();
   await fetchUserInfo();
   await updateDropdowns();
+  addItem(); // 첫 품목 자동 추가
 }
 
 async function fetchUserInfo() {
@@ -192,6 +189,9 @@ function bindEvents() {
   // New entry
   $('btn-new-entry').addEventListener('click', resetForm);
 
+  // Add item
+  $('btn-add-item').addEventListener('click', addItem);
+
   // Settings
   $('btn-save-settings').addEventListener('click', saveSettings);
   $('btn-logout').addEventListener('click', () => { if (confirm('로그아웃하시겠어요?')) logout(); });
@@ -261,10 +261,8 @@ async function submitForm() {
   const sheetId   = cfg.get('sheet_id');
   const sheetName = cfg.get('sheet_name') || '입고확인';
 
-  if (!sheetId) {
-    showToast('설정에서 스프레드시트 ID를 먼저 입력하세요', 'error');
-    return;
-  }
+  if (!sheetId) { showToast('설정에서 스프레드시트 ID를 먼저 입력하세요', 'error'); return; }
+  if (!items.length) { showToast('품목을 추가해 주세요', 'error'); return; }
 
   const ok = await ensureToken();
   if (!ok) { showToast('로그인이 필요해요', 'error'); return; }
@@ -272,61 +270,58 @@ async function submitForm() {
   $('btn-submit').disabled = true;
   $('btn-submit').textContent = '제출 중...';
 
-  // 전체 상태 계산
-  const allStatus = Object.values(status);
-  const hasError  = allStatus.includes('이상있음');
-  const allFilled = allStatus.every(v => v !== null);
-  const overallStatus = !allFilled ? '미완료' : hasError ? '이상있음' : '이상없음';
-
-  // 제출 시각
   const now = new Date();
   const submitTime = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  const row = [
+  const commonFields = [
     submitTime,
     $('inp-date').value,
     $('inp-check-date').value,
     $('inp-inspector').value,
     $('inp-confirmer').value,
     window._authorName || '',
-    $('res-product').value,
-    status.product   || '미입력',
-    $('res-qty').value,
-    status.qty       || '미입력',
-    $('res-order-qty').value,
-    status.orderQty  || '미입력',
-    $('res-box').value,
-    status.box       || '미입력',
-    $('inp-notes').value,
-    overallStatus,
   ];
 
-  try {
-    // 헤더가 없으면 먼저 추가
-    await ensureHeader(sheetId, sheetName);
+  // 품목별로 한 행씩
+  const rows = items.map((item, idx) => {
+    const statuses = [item.productStatus, item.qtyStatus, item.orderQtyStatus, item.boxStatus];
+    const hasError  = statuses.includes('이상있음');
+    const allFilled = statuses.every(v => v !== null);
+    const itemStatus = !allFilled ? '미완료' : hasError ? '이상있음' : '이상없음';
 
+    return [
+      ...commonFields,
+      idx + 1,           // 품목 번호
+      item.product,
+      item.productStatus  || '미입력',
+      item.qty,
+      item.qtyStatus      || '미입력',
+      item.orderQty,
+      item.orderQtyStatus || '미입력',
+      item.box,
+      item.boxStatus      || '미입력',
+      idx === 0 ? $('inp-notes').value : '', // 특이사항은 첫 행에만
+      itemStatus,
+    ];
+  });
+
+  try {
+    await ensureHeader(sheetId, sheetName);
     const range = encodeURIComponent(`${sheetName}!A:A`);
     const res = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ values: [row] }),
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: rows }),
       }
     );
-
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error?.message || `HTTP ${res.status}`);
     }
-
-    // 성공
-    $('success-desc').textContent = `${submitTime} 저장됨 — 전체 상태: ${overallStatus}`;
+    $('success-desc').textContent = `${submitTime} 저장됨 — ${items.length}개 품목`;
     $('success-screen').classList.add('show');
-
   } catch (e) {
     showToast('제출 실패: ' + e.message, 'error');
     $('btn-submit').disabled = false;
@@ -345,12 +340,12 @@ async function ensureHeader(sheetId, sheetName) {
 
   // 헤더 추가
   const header = [
-    '제출일시', '입고일', '검수일', '검수자', '확인자', '작성자',
+    '제출일시', '입고일', '검수일', '검수자', '확인자', '작성자', '품목번호',
     '제품명', '제품명_상태',
     '제품수량', '제품수량_상태',
     '발주수량', '발주수량_상태',
     '박스수량', '박스수량_상태',
-    '특이사항', '전체상태',
+    '특이사항', '품목상태',
   ];
   await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=USER_ENTERED`,
@@ -363,6 +358,100 @@ async function ensureHeader(sheetId, sheetName) {
       body: JSON.stringify({ values: [header] }),
     }
   );
+}
+
+// ── Item management
+function addItem() {
+  const id = ++itemIdCounter;
+  items.push({ id, product: '', qty: '', orderQty: '', box: '', productStatus: null, qtyStatus: null, orderQtyStatus: null, boxStatus: null });
+  renderItems();
+}
+
+function removeItem(id) {
+  if (items.length <= 1) { showToast('최소 1개 품목이 필요해요', 'error'); return; }
+  items = items.filter(it => it.id !== id);
+  renderItems();
+}
+
+function setItemStatus(id, field, val) {
+  const item = items.find(it => it.id === id);
+  if (item) item[field] = val;
+}
+
+function renderItems() {
+  const container = $('items-container');
+  container.innerHTML = items.map((item, idx) => `
+    <div class="item-card" id="item-${item.id}">
+      <div class="item-card-header">
+        <span class="item-num">ITEM ${idx + 1}</span>
+        <button class="btn-remove-item" onclick="removeItem(${item.id})">✕</button>
+      </div>
+      <div class="item-fields">
+        <div class="item-field">
+          <div class="item-field-label">제품명 · 입고품 및 인보이스 확인</div>
+          <div class="item-field-row">
+            <input class="check-result-input" type="text" placeholder="제품명 입력"
+              value="${escHtml(item.product)}"
+              oninput="items.find(i=>i.id===${item.id}).product=this.value" />
+            <div class="status-toggle">
+              <button class="status-btn ok ${item.productStatus === '이상없음' ? 'active' : ''}"
+                onclick="setItemStatus(${item.id},'productStatus','이상없음');toggleStatus(this)">✓</button>
+              <button class="status-btn err ${item.productStatus === '이상있음' ? 'active' : ''}"
+                onclick="setItemStatus(${item.id},'productStatus','이상있음');toggleStatus(this)">✗</button>
+            </div>
+          </div>
+        </div>
+        <div class="item-field">
+          <div class="item-field-label">제품 수량 · 실수량 확인</div>
+          <div class="item-field-row">
+            <input class="check-result-input" type="number" placeholder="수량 입력" min="0"
+              value="${item.qty}"
+              oninput="items.find(i=>i.id===${item.id}).qty=this.value" />
+            <div class="status-toggle">
+              <button class="status-btn ok ${item.qtyStatus === '이상없음' ? 'active' : ''}"
+                onclick="setItemStatus(${item.id},'qtyStatus','이상없음');toggleStatus(this)">✓</button>
+              <button class="status-btn err ${item.qtyStatus === '이상있음' ? 'active' : ''}"
+                onclick="setItemStatus(${item.id},'qtyStatus','이상있음');toggleStatus(this)">✗</button>
+            </div>
+          </div>
+        </div>
+        <div class="item-field">
+          <div class="item-field-label">발주 수량 · 거래명세서, 인보이스 확인</div>
+          <div class="item-field-row">
+            <input class="check-result-input" type="number" placeholder="수량 입력" min="0"
+              value="${item.orderQty}"
+              oninput="items.find(i=>i.id===${item.id}).orderQty=this.value" />
+            <div class="status-toggle">
+              <button class="status-btn ok ${item.orderQtyStatus === '이상없음' ? 'active' : ''}"
+                onclick="setItemStatus(${item.id},'orderQtyStatus','이상없음');toggleStatus(this)">✓</button>
+              <button class="status-btn err ${item.orderQtyStatus === '이상있음' ? 'active' : ''}"
+                onclick="setItemStatus(${item.id},'orderQtyStatus','이상있음');toggleStatus(this)">✗</button>
+            </div>
+          </div>
+        </div>
+        <div class="item-field">
+          <div class="item-field-label">박스 수량 · 실수량 확인</div>
+          <div class="item-field-row">
+            <input class="check-result-input" type="number" placeholder="수량 입력" min="0"
+              value="${item.box}"
+              oninput="items.find(i=>i.id===${item.id}).box=this.value" />
+            <div class="status-toggle">
+              <button class="status-btn ok ${item.boxStatus === '이상없음' ? 'active' : ''}"
+                onclick="setItemStatus(${item.id},'boxStatus','이상없음');toggleStatus(this)">✓</button>
+              <button class="status-btn err ${item.boxStatus === '이상있음' ? 'active' : ''}"
+                onclick="setItemStatus(${item.id},'boxStatus','이상있음');toggleStatus(this)">✗</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleStatus(btn) {
+  const parent = btn.closest('.status-toggle');
+  parent.querySelectorAll('.status-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
 }
 
 // ── Member management (Google Sheets 기반)
@@ -390,92 +479,22 @@ async function fetchMembers() {
   }
 }
 
-async function addMember() {
-  const name = $('inp-new-member').value.trim();
-  if (!name) return;
-  const sheetId = cfg.get('sheet_id');
-  if (!sheetId) { showToast('설정에서 스프레드시트 ID를 먼저 입력하세요', 'error'); return; }
+// ── User info
+let currentUserName = '';
 
-  const members = await fetchMembers();
-  if (members.includes(name)) { showToast('이미 있는 이름이에요', 'error'); return; }
-
-  const ok = await ensureToken();
-  if (!ok) return;
-
+async function fetchUserName() {
   try {
-    await ensureMemberSheet(sheetId);
-    const range = encodeURIComponent(`${MEMBER_SHEET}!A:A`);
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [[name]] }),
-      }
-    );
-    if (!res.ok) throw new Error('추가 실패');
-    $('inp-new-member').value = '';
-    showToast(`${name} 추가됐어요`, 'success');
-    await renderMemberList();
-    await updateDropdowns();
-  } catch (e) {
-    showToast('추가 실패: ' + e.message, 'error');
-  }
-}
-
-async function removeMember(name) {
-  if (!confirm(`'${name}'을(를) 삭제할까요?`)) return;
-  const sheetId = cfg.get('sheet_id');
-  if (!sheetId) return;
-  const ok = await ensureToken();
-  if (!ok) return;
-
-  try {
-    // 전체 데이터 읽기
-    const range = encodeURIComponent(`${MEMBER_SHEET}!A:A`);
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!res.ok) return '';
     const json = await res.json();
-    const values = (json.values || []).flat();
-
-    // 해당 이름의 행 인덱스 찾기 (1-based)
-    const rowIdx = values.findIndex(v => v === name);
-    if (rowIdx === -1) return;
-
-    // 스프레드시트 ID 가져와서 시트 ID 확인
-    const ssRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    const ssJson = await ssRes.json();
-    const sheet = ssJson.sheets.find(s => s.properties.title === MEMBER_SHEET);
-    if (!sheet) return;
-    const sheetGid = sheet.properties.sheetId;
-
-    // 해당 행 삭제
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requests: [{
-            deleteDimension: {
-              range: { sheetId: sheetGid, dimension: 'ROWS', startIndex: rowIdx, endIndex: rowIdx + 1 }
-            }
-          }]
-        }),
-      }
-    );
-    showToast(`${name} 삭제됐어요`, 'success');
-    await renderMemberList();
-    await updateDropdowns();
-  } catch (e) {
-    showToast('삭제 실패: ' + e.message, 'error');
-  }
+    return json.name || json.email || '';
+  } catch { return ''; }
 }
+
+async function addMember() {} // 더 이상 사용 안 함
+async function removeMember() {} // 더 이상 사용 안 함
 
 async function ensureMemberSheet(sheetId) {
   const res = await fetch(
@@ -528,17 +547,12 @@ function resetForm() {
   setDefaultDates();
   $('inp-inspector').value = '';
   $('inp-confirmer').value = '';
-  $('res-product').value = '';
-  $('res-qty').value = '';
-  $('res-order-qty').value = '';
-  $('res-box').value = '';
   $('inp-notes').value = '';
   $('btn-submit').disabled = false;
   $('btn-submit').textContent = '제출';
-
-  // 토글 초기화
-  Object.keys(status).forEach(k => status[k] = null);
-  document.querySelectorAll('.status-btn').forEach(b => b.classList.remove('active'));
+  items = [];
+  itemIdCounter = 0;
+  addItem();
 }
 
 // ── Toast
