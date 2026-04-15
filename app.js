@@ -232,6 +232,36 @@ function updateLoginStatusUI() {
   }
 }
 
+// ── Receipt number (YYMMDD-NNN)
+async function generateReceiptNo(submitTime) {
+  const now = new Date();
+  const yy  = String(now.getFullYear()).slice(2);
+  const mm  = String(now.getMonth() + 1).padStart(2, '0');
+  const dd  = String(now.getDate()).padStart(2, '0');
+  const prefix = `${yy}${mm}${dd}`;
+
+  try {
+    const ok = await ensureToken();
+    if (!ok) return `${prefix}-001`;
+
+    const range = encodeURIComponent(`${SHEET_NAME}!A:A`);
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${range}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) return `${prefix}-001`;
+
+    const json = await res.json();
+    const values = (json.values || []).flat();
+    // 오늘 날짜 prefix로 시작하는 접수번호 개수 카운트
+    const todayCount = values.filter(v => String(v).startsWith(prefix)).length;
+    const seq = String(todayCount + 1).padStart(3, '0');
+    return `${prefix}-${seq}`;
+  } catch {
+    return `${prefix}-001`;
+  }
+}
+
 // ── Submit
 async function submitForm() {
   const sheetId   = SHEET_ID;
@@ -252,6 +282,9 @@ async function submitForm() {
   $('btn-submit').disabled = true;
   $('btn-submit').textContent = '제출 중...';
 
+  // 접수번호 생성 (YYMMDD-NNN)
+  const receiptNo = await generateReceiptNo(submitTime);
+
   const now = new Date();
   const submitTime = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
@@ -265,7 +298,7 @@ async function submitForm() {
     const isComplete = allFilled && !hasError ? '이상없음' : allFilled ? '이상있음' : '미완료';
 
     return isEmpty ? null : [
-      idx + 1,
+      receiptNo,
       item.supplier,
       item.product,
       item.productStatus   || '미입력',
@@ -327,7 +360,7 @@ async function ensureHeader(sheetId, sheetName) {
 
   // 헤더 추가
   const header = [
-    '품목번호', '공급처', '제품명', '제품명_상태',
+    '접수번호', '공급처', '제품명', '제품명_상태',
     '제품수량', '발주수량', '발주수량_상태',
     '박스수량', '특이사항',
     '입고일', '검수일', '검수자', '확인자', '작성자', '작성일시', '검수결과',
