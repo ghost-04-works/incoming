@@ -108,6 +108,8 @@ function onLoginSuccess() {
   $('lock-screen').style.display = 'none';
   updateConnStatus(!!cfg.get('sheet_id'));
   updateLoginStatusUI();
+  renderMemberList();
+  updateDropdowns();
 }
 
 function logout() {
@@ -173,6 +175,10 @@ function bindEvents() {
   // Settings
   $('btn-save-settings').addEventListener('click', saveSettings);
   $('btn-logout').addEventListener('click', () => { if (confirm('로그아웃하시겠어요?')) logout(); });
+
+  // Member management
+  $('btn-add-member').addEventListener('click', addMember);
+  $('inp-new-member').addEventListener('keydown', e => { if (e.key === 'Enter') addMember(); });
 }
 
 // ── Dates
@@ -342,7 +348,66 @@ async function ensureHeader(sheetId, sheetName) {
   );
 }
 
-// ── Reset form
+// ── Member management
+function getMembers() {
+  try { return JSON.parse(localStorage.getItem('gw_incoming_members') || '[]'); }
+  catch { return []; }
+}
+
+function saveMembers(members) {
+  localStorage.setItem('gw_incoming_members', JSON.stringify(members));
+}
+
+function addMember() {
+  const name = $('inp-new-member').value.trim();
+  if (!name) return;
+  const members = getMembers();
+  if (members.includes(name)) {
+    showToast('이미 있는 이름이에요', 'error');
+    return;
+  }
+  members.push(name);
+  saveMembers(members);
+  $('inp-new-member').value = '';
+  renderMemberList();
+  updateDropdowns();
+}
+
+function removeMember(name) {
+  const members = getMembers().filter(m => m !== name);
+  saveMembers(members);
+  renderMemberList();
+  updateDropdowns();
+}
+
+function renderMemberList() {
+  const members = getMembers();
+  const el = $('member-list');
+  if (!members.length) {
+    el.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:4px 0;">멤버가 없어요</div>`;
+    return;
+  }
+  el.innerHTML = members.map(name => `
+    <div style="display:flex;align-items:center;gap:8px;background:var(--bg3);border-radius:8px;padding:9px 12px;">
+      <span style="flex:1;font-size:14px;">${escHtml(name)}</span>
+      <button onclick="removeMember('${escHtml(name)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0;line-height:1;">✕</button>
+    </div>
+  `).join('');
+}
+
+function updateDropdowns() {
+  const members = getMembers();
+  ['inp-inspector', 'inp-confirmer'].forEach(id => {
+    const sel = $(id);
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">선택</option>' +
+      members.map(m => `<option value="${escHtml(m)}" ${m === cur ? 'selected' : ''}>${escHtml(m)}</option>`).join('');
+  });
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 function resetForm() {
   $('success-screen').classList.remove('show');
   $('inp-date').value = '';

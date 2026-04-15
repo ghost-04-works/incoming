@@ -134,6 +134,16 @@
     }
     .field-input::placeholder { color: var(--text3); }
     .field-input[type="date"] { color-scheme: dark; }
+    select.field-input {
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23555' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0px center;
+      padding-right: 20px;
+    }
+    select.field-input option { background: var(--bg2); color: var(--text); }
 
     /* ── Check items ── */
     .check-item {
@@ -449,11 +459,15 @@
       </div>
       <div class="field-row">
         <label class="field-label" for="inp-inspector">검수자</label>
-        <input class="field-input" id="inp-inspector" type="text" placeholder="이름 입력" />
+        <select class="field-input" id="inp-inspector">
+          <option value="">선택</option>
+        </select>
       </div>
       <div class="field-row">
-        <label class="field-label" for="inp-confirmer">확인</label>
-        <input class="field-input" id="inp-confirmer" type="text" placeholder="이름 입력" />
+        <label class="field-label" for="inp-confirmer">확인자</label>
+        <select class="field-input" id="inp-confirmer">
+          <option value="">선택</option>
+        </select>
       </div>
     </div>
 
@@ -567,7 +581,16 @@
     </div>
   </div>
   <div class="card">
-    <div class="card-title">계정</div>
+    <div class="card-title">멤버 관리</div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+      <div class="settings-desc">검수자/확인자 드롭다운에 표시될 멤버 목록이에요</div>
+      <div id="member-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div style="display:flex;gap:8px;">
+        <input class="settings-input" id="inp-new-member" type="text" placeholder="이름 입력" style="flex:1;" />
+        <button class="btn-secondary" id="btn-add-member" style="width:auto;padding:10px 16px;flex-shrink:0;">추가</button>
+      </div>
+    </div>
+  </div>
     <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
       <div class="settings-desc" id="login-status-desc">확인 중...</div>
       <button class="btn-secondary btn-logout" id="btn-logout">로그아웃</button>
