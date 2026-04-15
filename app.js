@@ -3,7 +3,7 @@
    ───────────────────────────────────────────── */
 
 const CLIENT_ID = '666157816733-0uu1dkoda0ljjslrd479j371snkj62t7.apps.googleusercontent.com';
-const SCOPE     = 'https://www.googleapis.com/auth/spreadsheets';
+const SCOPE = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile';
 
 // ── State
 let accessToken = null;
@@ -108,7 +108,25 @@ async function onLoginSuccess() {
   $('lock-screen').style.display = 'none';
   updateConnStatus(!!cfg.get('sheet_id'));
   updateLoginStatusUI();
+  await fetchUserInfo();
   await updateDropdowns();
+}
+
+async function fetchUserInfo() {
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!res.ok) return;
+    const json = await res.json();
+    const name = json.name || json.email || '';
+    const el = $('inp-author');
+    if (el) el.textContent = name;
+    // 제출 시 사용할 수 있도록 저장
+    window._authorName = name;
+  } catch (e) {
+    window._authorName = '';
+  }
 }
 
 function logout() {
@@ -177,10 +195,6 @@ function bindEvents() {
   // Settings
   $('btn-save-settings').addEventListener('click', saveSettings);
   $('btn-logout').addEventListener('click', () => { if (confirm('로그아웃하시겠어요?')) logout(); });
-
-  // Member management
-  $('btn-add-member').addEventListener('click', addMember);
-  $('inp-new-member').addEventListener('keydown', e => { if (e.key === 'Enter') addMember(); });
 }
 
 // ── Dates
@@ -274,6 +288,7 @@ async function submitForm() {
     $('inp-check-date').value,
     $('inp-inspector').value,
     $('inp-confirmer').value,
+    window._authorName || '',
     $('res-product').value,
     status.product   || '미입력',
     $('res-qty').value,
@@ -330,7 +345,7 @@ async function ensureHeader(sheetId, sheetName) {
 
   // 헤더 추가
   const header = [
-    '제출일시', '입고일', '검수일', '검수자', '확인',
+    '제출일시', '입고일', '검수일', '검수자', '확인자', '작성자',
     '제품명', '제품명_상태',
     '제품수량', '제품수량_상태',
     '발주수량', '발주수량_상태',
@@ -355,19 +370,24 @@ const MEMBER_SHEET = '멤버';
 
 async function fetchMembers() {
   const sheetId = cfg.get('sheet_id');
-  if (!sheetId) return [];
+  if (!sheetId) { showToast('시트ID 없음', 'error'); return []; }
   const ok = await ensureToken();
-  if (!ok) return [];
+  if (!ok) { showToast('토큰 실패', 'error'); return []; }
   try {
     const range = encodeURIComponent(`${MEMBER_SHEET}!A:A`);
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    if (!res.ok) return [];
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) {
+      const err = await res.json();
+      showToast('멤버 로드 실패: ' + (err.error?.message || res.status), 'error');
+      return [];
+    }
     const json = await res.json();
     return (json.values || []).flat().filter(v => v && v.trim());
-  } catch { return []; }
+  } catch (e) {
+    showToast('멤버 오류: ' + e.message, 'error');
+    return [];
+  }
 }
 
 async function addMember() {
@@ -477,17 +497,15 @@ async function ensureMemberSheet(sheetId) {
 
 async function renderMemberList() {
   const el = $('member-list');
+  if (!el) return;
   el.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:4px 0;">불러오는 중...</div>`;
   const members = await fetchMembers();
   if (!members.length) {
-    el.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:4px 0;">멤버가 없어요</div>`;
+    el.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:4px 0;">멤버가 없어요 — 시트의 '멤버' 탭 A열에 이름을 입력하세요</div>`;
     return;
   }
   el.innerHTML = members.map(name => `
-    <div style="display:flex;align-items:center;gap:8px;background:var(--bg3);border-radius:8px;padding:9px 12px;">
-      <span style="flex:1;font-size:14px;">${escHtml(name)}</span>
-      <button onclick="removeMember('${escHtml(name)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0;line-height:1;">✕</button>
-    </div>
+    <div style="background:var(--bg3);border-radius:8px;padding:9px 12px;font-size:14px;">${escHtml(name)}</div>
   `).join('');
 }
 
