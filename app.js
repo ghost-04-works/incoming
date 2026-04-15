@@ -14,11 +14,9 @@ let tokenExpiry = 0;
 let items = [];
 let itemIdCounter = 0;
 
-// ── Config
-const cfg = {
-  get: k => localStorage.getItem('gw_incoming_' + k) || '',
-  set: (k, v) => localStorage.setItem('gw_incoming_' + k, v),
-};
+// ── Sheet config (고정값)
+const SHEET_ID   = '1z71UijTdDOeuyaFVTaV6Xjn6MRP4wNfy1cKiy24Cyg4';
+const SHEET_NAME = '입고확인';
 
 // ── DOM
 const $ = id => document.getElementById(id);
@@ -102,7 +100,7 @@ function onTokenError(err) {
 
 async function onLoginSuccess() {
   $('lock-screen').style.display = 'none';
-  updateConnStatus(!!cfg.get('sheet_id'));
+  updateConnStatus(!!SHEET_ID);
   updateLoginStatusUI();
   await fetchUserInfo();
   await updateDropdowns();
@@ -193,8 +191,7 @@ function bindEvents() {
   // Add item
   $('btn-add-item').addEventListener('click', addItem);
 
-  // Settings
-  $('btn-save-settings').addEventListener('click', saveSettings);
+  // Settings - 로그아웃만
   $('btn-logout').addEventListener('click', () => { if (confirm('로그아웃하시겠어요?')) logout(); });
 }
 
@@ -205,41 +202,6 @@ function setDefaultDates() {
 }
 
 // ── Settings
-function loadSettings() {
-  $('cfg-sheet-id').value   = cfg.get('sheet_id');
-  $('cfg-sheet-name').value = cfg.get('sheet_name') || '입고확인';
-}
-
-async function saveSettings() {
-  cfg.set('sheet_id',   $('cfg-sheet-id').value.trim());
-  cfg.set('sheet_name', $('cfg-sheet-name').value.trim() || '입고확인');
-  $('settings-status').textContent = '연결 테스트 중...';
-  const result = await testConnection();
-  $('settings-status').textContent = result.ok
-    ? '✅ 연결 성공'
-    : `❌ 연결 실패 — ${result.msg}`;
-  updateConnStatus(result.ok);
-}
-
-async function testConnection() {
-  const sheetId   = cfg.get('sheet_id');
-  const sheetName = cfg.get('sheet_name') || '입고확인';
-  if (!sheetId) return { ok: false, msg: '스프레드시트 ID가 없어요' };
-  const tokenOk = await ensureToken();
-  if (!tokenOk) return { ok: false, msg: '로그인 토큰 갱신 실패' };
-  try {
-    const range = encodeURIComponent(`${sheetName}!A1`);
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    if (res.ok) return { ok: true };
-    const err = await res.json();
-    return { ok: false, msg: `HTTP ${res.status}: ${err.error?.message || '알 수 없는 오류'}` };
-  } catch (e) {
-    return { ok: false, msg: e.message };
-  }
-}
-
 function updateConnStatus(ok) {
   $('conn-dot').className = 'status-dot ' + (ok ? 'ok' : 'err');
   $('conn-text').textContent = ok ? '연결됨' : '미연결';
@@ -259,8 +221,8 @@ function updateLoginStatusUI() {
 
 // ── Submit
 async function submitForm() {
-  const sheetId   = cfg.get('sheet_id');
-  const sheetName = cfg.get('sheet_name') || '입고확인';
+  const sheetId   = SHEET_ID;
+  const sheetName = SHEET_NAME;
 
   if (!sheetId) { showToast('설정에서 스프레드시트 ID를 먼저 입력하세요', 'error'); return; }
   if (!items.length) { showToast('품목을 추가해 주세요', 'error'); return; }
@@ -512,7 +474,7 @@ async function addSupplierInline(id) {
     showToast('이미 있는 공급처예요', 'error');
     return;
   }
-  const sheetId = cfg.get('sheet_id');
+  const sheetId = SHEET_ID;
   if (!sheetId) { showToast('설정에서 스프레드시트 ID를 먼저 입력하세요', 'error'); return; }
   const ok = await ensureToken();
   if (!ok) return;
@@ -543,7 +505,7 @@ const MEMBER_SHEET   = '멤버';
 const SUPPLIER_SHEET = '공급처';
 
 async function fetchSuppliers() {
-  const sheetId = cfg.get('sheet_id');
+  const sheetId = SHEET_ID;
   if (!sheetId) return [];
   const ok = await ensureToken();
   if (!ok) return [];
@@ -560,7 +522,7 @@ async function fetchSuppliers() {
 }
 
 async function fetchMembers() {
-  const sheetId = cfg.get('sheet_id');
+  const sheetId = SHEET_ID;
   if (!sheetId) { showToast('시트ID 없음', 'error'); return []; }
   const ok = await ensureToken();
   if (!ok) { showToast('토큰 실패', 'error'); return []; }
