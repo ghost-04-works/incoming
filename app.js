@@ -274,15 +274,6 @@ async function submitForm() {
   const now = new Date();
   const submitTime = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  const commonFields = [
-    submitTime,
-    $('inp-date').value,
-    $('inp-check-date').value,
-    $('inp-inspector').value,
-    $('inp-confirmer').value,
-    window._authorName || '',
-  ];
-
   // 품목별로 한 행씩
   const rows = items.map((item, idx) => {
     const statuses = [item.productStatus, item.orderQtyStatus];
@@ -291,7 +282,6 @@ async function submitForm() {
     const itemStatus = !allFilled ? '미완료' : hasError ? '이상있음' : '이상없음';
 
     return [
-      ...commonFields,
       idx + 1,
       item.supplier,
       item.product,
@@ -301,7 +291,13 @@ async function submitForm() {
       item.orderQtyStatus  || '미입력',
       item.box,
       itemStatus,
-      idx === 0 ? $('inp-notes').value : '',
+      item.notes,
+      $('inp-date').value,
+      $('inp-check-date').value,
+      $('inp-inspector').value,
+      $('inp-confirmer').value,
+      window._authorName || '',
+      submitTime,
     ];
   });
 
@@ -340,10 +336,10 @@ async function ensureHeader(sheetId, sheetName) {
 
   // 헤더 추가
   const header = [
-    '작성일시', '입고일', '검수일', '검수자', '확인자', '작성자', '품목번호',
-    '공급처', '제품명', '제품명_상태',
+    '품목번호', '공급처', '제품명', '제품명_상태',
     '제품수량', '발주수량', '발주수량_상태',
     '박스수량', '품목상태', '특이사항',
+    '입고일', '검수일', '검수자', '확인자', '작성자', '작성일시',
   ];
   await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=USER_ENTERED`,
@@ -363,7 +359,7 @@ let suppliers = []; // 공급처 목록 캐시
 
 function addItem() {
   const id = ++itemIdCounter;
-  items.push({ id, supplier: '', product: '', qty: '', orderQty: '', box: '', productStatus: null, orderQtyStatus: null });
+  items.push({ id, supplier: '', product: '', qty: '', orderQty: '', box: '', notes: '', productStatus: null, orderQtyStatus: null });
   renderItems();
 }
 
@@ -458,6 +454,14 @@ function renderItems() {
           <input class="check-result-input" type="number" placeholder="수량 입력" min="0"
             value="${item.box}"
             oninput="items.find(i=>i.id===${item.id}).box=this.value" />
+        </div>
+
+        <!-- 특이사항 -->
+        <div class="item-field">
+          <div class="item-field-label">특이사항</div>
+          <textarea class="check-result-input" placeholder="특이사항이 있으면 입력해 주세요"
+            style="resize:none;min-height:64px;line-height:1.5;"
+            oninput="items.find(i=>i.id===${item.id}).notes=this.value">${escHtml(item.notes || '')}</textarea>
         </div>
 
       </div>
@@ -635,7 +639,6 @@ function resetForm() {
   setDefaultDates();
   $('inp-inspector').value = '';
   $('inp-confirmer').value = '';
-  $('inp-notes').value = '';
   $('btn-submit').disabled = false;
   $('btn-submit').textContent = '제출';
   items = [];
