@@ -25,7 +25,6 @@ const $ = id => document.getElementById(id);
 function init() {
   bindEvents();
   setDefaultDates();
-  loadSettings();
 
   // 기존 서비스워커 해제
   if ('serviceWorker' in navigator) {
